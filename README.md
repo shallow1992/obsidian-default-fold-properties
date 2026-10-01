@@ -36,7 +36,7 @@ Go to **Settings** -> **Fold Properties**:
 
 ### Manual Installation
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [Latest Release](https://github.com/shallow1992/obsidian-fold-properties/releases/latest).
-2. Create a folder named `obsidian-fold-properties` in `<vault>/.obsidian/plugins/`.
+2. Create a folder named `default-fold-properties` in `<vault>/.obsidian/plugins/`.
 3. Copy the downloaded files into that folder.
 4. Reload Obsidian and enable the plugin in **Settings** -> **Community Plugins**.
 
