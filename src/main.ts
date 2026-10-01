@@ -4,20 +4,37 @@ import {
 	TFile,
 } from 'obsidian';
 
-declare module 'obsidian' {
-	interface App {
-		commands: {
-			executeCommandById(commandId: string): boolean;
-		};
-	}
+interface Fold {
+	from: number;
+	to: number;
+}
+
+interface FoldedProperties {
+	folds: Fold[];
+	lines: number;
+}
+
+interface FoldManager {
+	loadPath: (path: string) => FoldedProperties | null;
+	savePath: (path: string, folds: FoldedProperties) => void;
+}
+
+interface InternalApp {
+	foldManager?: FoldManager;
+	commands: {
+		executeCommandById(commandId: string): boolean;
+	};
 }
 
 export default class FoldPropertiesPlugin extends Plugin {
+	private originalLoadPath: ((path: string) => FoldedProperties | null) | null = null;
 	private pendingFoldTimeout: number | null = null;
 	private static readonly RETRY_DELAY_MS = 30;
 	private static readonly MAX_FOLD_ATTEMPTS = 15;
 
 	async onload() {
+		this.patchFoldManager();
+
 		this.app.workspace.onLayoutReady(() => {
 			this.registerEvent(
 				this.app.workspace.on('file-open', (file: TFile | null) => {
@@ -32,7 +49,6 @@ export default class FoldPropertiesPlugin extends Plugin {
 				}),
 			);
 
-			// Trigger for initially active file on startup
 			const initialFile = this.app.workspace.getActiveFile();
 			if (initialFile) {
 				this.handleFileOrLeafChange(initialFile);
@@ -41,9 +57,65 @@ export default class FoldPropertiesPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.unpatchFoldManager();
 		this.clearPendingFold();
 	}
 
+	/**
+	 * Patches app.foldManager.loadPath so that notes without prior fold history
+	 * default to collapsed ({ from: 0, to: 0 }) BEFORE Obsidian renders the DOM.
+	 * This prevents any visual layout shifts or slow-closing animations.
+	 */
+	private patchFoldManager() {
+		const internalApp = this.app as unknown as InternalApp;
+		const foldManager = internalApp.foldManager;
+
+		if (!foldManager || typeof foldManager.loadPath !== 'function') {
+			return;
+		}
+
+		const originalMethod = foldManager.loadPath;
+		this.originalLoadPath = originalMethod;
+
+		foldManager.loadPath = (path: string): FoldedProperties | null => {
+			const saved = originalMethod.call(foldManager, path);
+
+			// If the user or Obsidian already has saved fold state for this note, respect it
+			if (saved !== null) {
+				return saved;
+			}
+
+			// For notes with no prior fold state, check if frontmatter exists at open time
+			const abstractFile = this.app.vault.getAbstractFileByPath(path);
+			if (abstractFile instanceof TFile) {
+				const cache = this.app.metadataCache.getFileCache(abstractFile);
+				if (cache?.frontmatter) {
+					// Default to collapsed for notes that have frontmatter!
+					return {
+						folds: [{ from: 0, to: 0 }],
+						lines: 0,
+					};
+				}
+			}
+
+			return null;
+		};
+	}
+
+	private unpatchFoldManager() {
+		const internalApp = this.app as unknown as InternalApp;
+		const foldManager = internalApp.foldManager;
+
+		if (foldManager && this.originalLoadPath) {
+			foldManager.loadPath = this.originalLoadPath;
+			this.originalLoadPath = null;
+		}
+	}
+
+	/**
+	 * Fallback / synchronization handler in case foldManager is unavailable
+	 * or for dynamically rendered views.
+	 */
 	private handleFileOrLeafChange(file: TFile | null) {
 		this.clearPendingFold();
 
@@ -51,9 +123,6 @@ export default class FoldPropertiesPlugin extends Plugin {
 			return;
 		}
 
-		// Only fold if the note already has frontmatter/properties when opened.
-		// If a note opens without frontmatter, we do not fold so the user can
-		// add new properties during their editing session without disruption.
 		const fileCache = this.app.metadataCache.getFileCache(file);
 		if (!fileCache?.frontmatter) {
 			return;
@@ -66,7 +135,6 @@ export default class FoldPropertiesPlugin extends Plugin {
 		this.pendingFoldTimeout = window.setTimeout(() => {
 			this.pendingFoldTimeout = null;
 
-			// Ensure active file hasn't changed during delay
 			if (this.app.workspace.getActiveFile()?.path !== file.path) {
 				return;
 			}
@@ -92,7 +160,8 @@ export default class FoldPropertiesPlugin extends Plugin {
 
 			// If properties are not collapsed, trigger fold instantly
 			if (!metadataContainer.classList.contains('is-collapsed')) {
-				this.app.commands.executeCommandById(
+				const internalApp = this.app as unknown as InternalApp;
+				internalApp.commands.executeCommandById(
 					'editor:toggle-fold-properties',
 				);
 			}

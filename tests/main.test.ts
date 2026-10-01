@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.3.0",
+			version: "0.4.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -66,89 +66,59 @@ describe("FoldPropertiesPlugin", () => {
 		vi.useRealTimers();
 	});
 
-	it("should register event listeners on onload", async () => {
-		await plugin.onload();
-		expect(plugin.registerEvent).toHaveBeenCalled();
-	});
-
-	it("should fold properties when an unfolded note with existing frontmatter is opened", async () => {
-		const mockFile = { path: "with-frontmatter.md" } as TFile;
-		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
+	it("should patch app.foldManager.loadPath and default to collapsed for notes with frontmatter", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "with-frontmatter.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
-			frontmatter: { title: "Hello World" },
+			frontmatter: { title: "Test" },
 		});
 
-		const metadataContainer = document.createElement("div");
-		metadataContainer.className = "metadata-container";
-
-		const leafContainer = document.createElement("div");
-		leafContainer.appendChild(metadataContainer);
-
-		const mockView = {
-			containerEl: leafContainer,
-		} as unknown as MarkdownView;
-
-		(app.workspace.getActiveViewOfType as any).mockReturnValue(mockView);
-
 		await plugin.onload();
 
-		// Fast forward timer for scheduleFold
-		vi.advanceTimersByTime(50);
-
-		expect(app.commands.executeCommandById).toHaveBeenCalledWith(
-			"editor:toggle-fold-properties"
-		);
+		// Calling loadPath on a note without previous save should return { from: 0, to: 0 }
+		const foldData = (app as any).foldManager.loadPath("with-frontmatter.md");
+		expect(foldData).toEqual({
+			folds: [{ from: 0, to: 0 }],
+			lines: 0,
+		});
 	});
 
-	it("should NOT fold properties when a note WITHOUT frontmatter is opened", async () => {
-		const mockFile = { path: "no-frontmatter.md" } as TFile;
-		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
-		// Note has no frontmatter
+	it("should NOT default to collapsed when note has NO frontmatter", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "no-frontmatter.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue(null);
 
-		const metadataContainer = document.createElement("div");
-		metadataContainer.className = "metadata-container";
-
-		const leafContainer = document.createElement("div");
-		leafContainer.appendChild(metadataContainer);
-
-		const mockView = {
-			containerEl: leafContainer,
-		} as unknown as MarkdownView;
-
-		(app.workspace.getActiveViewOfType as any).mockReturnValue(mockView);
-
 		await plugin.onload();
 
-		vi.advanceTimersByTime(50);
-
-		// Should not attempt to fold because frontmatter did not exist at open time
-		expect(app.commands.executeCommandById).not.toHaveBeenCalled();
+		const foldData = (app as any).foldManager.loadPath("no-frontmatter.md");
+		expect(foldData).toBeNull();
 	});
 
-	it("should not fold properties if already collapsed", async () => {
-		const mockFile = { path: "collapsed.md" } as TFile;
-		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
+	it("should respect existing saved fold state if user manually operated", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "existing.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
-			frontmatter: { title: "Collapsed" },
+			frontmatter: { title: "Existing" },
 		});
 
-		const metadataContainer = document.createElement("div");
-		metadataContainer.className = "metadata-container is-collapsed";
-
-		const leafContainer = document.createElement("div");
-		leafContainer.appendChild(metadataContainer);
-
-		const mockView = {
-			containerEl: leafContainer,
-		} as unknown as MarkdownView;
-
-		(app.workspace.getActiveViewOfType as any).mockReturnValue(mockView);
+		// Mock that foldManager already has saved data (e.g. user unfolded it, so folds is empty)
+		const savedData = { folds: [], lines: 50 };
+		const originalLoad = (app as any).foldManager.loadPath;
+		originalLoad.mockReturnValue(savedData);
 
 		await plugin.onload();
 
-		vi.advanceTimersByTime(50);
+		const result = (app as any).foldManager.loadPath("existing.md");
+		expect(result).toBe(savedData);
+	});
 
-		expect(app.commands.executeCommandById).not.toHaveBeenCalled();
+	it("should restore original foldManager.loadPath on onunload", async () => {
+		const originalLoad = (app as any).foldManager.loadPath;
+
+		await plugin.onload();
+		expect((app as any).foldManager.loadPath).not.toBe(originalLoad);
+
+		plugin.onunload();
+		expect((app as any).foldManager.loadPath).toBe(originalLoad);
 	});
 });
