@@ -1,0 +1,112 @@
+name: Sync Upstream (Official Sample Plugin)
+
+on:
+  schedule:
+    # Run every Monday at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual sync trigger'
+        required: false
+        default: 'Manual trigger'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch official upstream
+        run: |
+          git remote add upstream https://github.com/obsidianmd/obsidian-sample-plugin.git || true
+          git fetch upstream master
+
+      - name: Check for upstream updates
+        id: check_upstream
+        run: |
+          CURRENT_SHA=$(cat .upstream-commit 2>/dev/null || echo "")
+          LATEST_SHA=$(git rev-parse upstream/master)
+          echo "Tracked SHA: $CURRENT_SHA"
+          echo "Latest Upstream SHA: $LATEST_SHA"
+
+          if [ "$CURRENT_SHA" = "$LATEST_SHA" ]; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "Repository is already up to date with official obsidian-sample-plugin."
+          else
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+            echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply upstream changes and create Pull Request
+        if: steps.check_upstream.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_SHA: ${{ steps.check_upstream.outputs.current_sha }}
+          LATEST_SHA: ${{ steps.check_upstream.outputs.latest_sha }}
+        run: |
+          BRANCH_NAME="sync-official-upstream"
+          SHORT_SHA=$(echo "$LATEST_SHA" | cut -c1-7)
+
+          git checkout -B "$BRANCH_NAME"
+
+          # Collect commit summaries from upstream
+          COMMIT_LOGS=$(git log --oneline "${CURRENT_SHA}..${LATEST_SHA}" 2>/dev/null || echo "New upstream commits")
+
+          # Create a patch from upstream commits and apply cleanly
+          git diff "${CURRENT_SHA}..${LATEST_SHA}" > upstream.patch
+          if [ -s upstream.patch ]; then
+            git apply --reject --whitespace=fix upstream.patch || true
+            rm -f upstream.patch
+          fi
+
+          # Update the tracked upstream commit SHA
+          echo "$LATEST_SHA" > .upstream-commit
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No file changes detected after patch application."
+            exit 0
+          fi
+
+          git commit -m "chore(deps): sync updates from official obsidian-sample-plugin ($SHORT_SHA)"
+          git push -u origin "$BRANCH_NAME" --force
+
+          # Generate PR body using a clean markdown file
+          echo "Automated sync from upstream official template (\`obsidianmd/obsidian-sample-plugin\`)." > pr_body.md
+          echo "" >> pr_body.md
+          echo "### Upstream Commits:" >> pr_body.md
+          echo '```text' >> pr_body.md
+          echo "$COMMIT_LOGS" >> pr_body.md
+          echo '```' >> pr_body.md
+          echo "" >> pr_body.md
+          echo "Tracked Upstream SHA: \`$LATEST_SHA\`" >> pr_body.md
+
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
+          if [ -z "$EXISTING_PR" ]; then
+            gh pr create \
+              --title "chore(deps): sync updates from official obsidian-sample-plugin" \
+              --body-file pr_body.md \
+              --base master \
+              --head "$BRANCH_NAME"
+            echo "Pull Request created successfully."
+          else
+            echo "Pull Request #$EXISTING_PR already exists for $BRANCH_NAME. Updated branch."
+          fi
+          rm -f pr_body.md

@@ -1,0 +1,12 @@
+services:
+  obsidian-plugin-template: &obsidian-plugin-template
+    build: .
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - node_modules:/app/node_modules
+    command: npm run dev
+
+volumes:
+  node_modules:
+

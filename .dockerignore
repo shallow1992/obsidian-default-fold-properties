@@ -1,0 +1,10 @@
+node_modules
+.git
+.github
+main.js
+dist
+coverage
+.claude/worktrees
+.gemini/worktrees
+.worktrees
+
