@@ -2,6 +2,11 @@ import {
 	Plugin,
 	TFile,
 } from 'obsidian';
+import {
+	DEFAULT_SETTINGS,
+	FoldPropertiesSettings,
+	FoldPropertiesSettingTab,
+} from './settings';
 
 interface Fold {
 	from: number;
@@ -23,15 +28,27 @@ interface InternalApp {
 }
 
 export default class FoldPropertiesPlugin extends Plugin {
+	settings: FoldPropertiesSettings = DEFAULT_SETTINGS;
 	private originalLoadPath: ((path: string) => FoldedProperties | null) | null = null;
 	private originalSavePath: ((path: string, folds: FoldedProperties) => void) | null = null;
 
-	onload() {
+	async onload() {
+		await this.loadSettings();
+		this.addSettingTab(new FoldPropertiesSettingTab(this.app, this));
 		this.patchFoldManager();
 	}
 
 	onunload() {
 		this.unpatchFoldManager();
+	}
+
+	async loadSettings() {
+		const loaded = (await this.loadData()) as Partial<FoldPropertiesSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
 	}
 
 	private patchFoldManager() {
@@ -54,7 +71,7 @@ export default class FoldPropertiesPlugin extends Plugin {
 				const hasFrontmatter = abstractFile instanceof TFile &&
 					Boolean(this.app.metadataCache.getFileCache(abstractFile)?.frontmatter);
 
-				if (!hasFrontmatter) {
+				if (!hasFrontmatter || this.settings.foldMode === 'always') {
 					return originalSave.call(foldManager, path, folds);
 				}
 
@@ -91,6 +108,20 @@ export default class FoldPropertiesPlugin extends Plugin {
 				return saved;
 			}
 
+			// In 'always' mode: ALWAYS return properties folded, even if user unfolded during previous visit
+			if (this.settings.foldMode === 'always') {
+				const currentFolds = Array.isArray(saved?.folds) ? saved.folds : [];
+				const hasFold = currentFolds.some((f) => f.from === 0 && f.to === 0);
+				if (hasFold) {
+					return saved;
+				}
+				return {
+					folds: [{ from: 0, to: 0 }, ...currentFolds],
+					lines: saved?.lines ?? 0,
+				};
+			}
+
+			// In 'remember' mode:
 			// Initial state / No user manual override:
 			// Invert default: return closed ({ from: 0, to: 0 })
 			if (saved === null) {
