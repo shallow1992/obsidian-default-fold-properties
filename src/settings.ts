@@ -1,11 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type FoldPropertiesPlugin from './main';
-
-export type FoldMode = 'remember' | 'always';
-
-export interface FoldPropertiesSettings {
-	foldMode: FoldMode;
-}
+import type { FoldMode, FoldPropertiesSettings } from './types';
 
 export const DEFAULT_SETTINGS: FoldPropertiesSettings = {
 	foldMode: 'remember',

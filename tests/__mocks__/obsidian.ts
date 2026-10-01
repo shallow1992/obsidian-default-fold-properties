@@ -134,6 +134,7 @@ export class Setting {
 	addButton = vi.fn().mockImplementation((cb) => {
 		cb({
 			setButtonText: vi.fn().mockReturnThis(),
+			setWarning: vi.fn().mockReturnThis(),
 			onClick: vi.fn().mockReturnThis(),
 		});
 		return this;

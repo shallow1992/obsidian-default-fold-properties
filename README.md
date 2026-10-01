@@ -1,89 +1,64 @@
-# Obsidian Plugin Template (Batteries-Included)
+# Obsidian Fold Properties
 
-A robust, production-grade template repository for building [Obsidian](https://obsidian.md) plugins.
-
-It builds directly upon the official [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) while adding **Docker isolation**, **Vitest unit testing**, **automated upstream synchronization**, and **GitHub Actions CI/CD**.
+An Obsidian plugin that folds frontmatter properties by default when opening notes, eliminating layout shift (CLS = 0) with seamless state management.
 
 ---
 
-## 🚀 Key Features
+## ✨ Features
 
-- **Official Upstream Synchronization**: Shares Git commit history with `obsidianmd/obsidian-sample-plugin`. A weekly GitHub Actions workflow (`sync-upstream.yml`) automatically checks for official updates and opens Pull Requests.
-- **Docker Container Isolation**: Zero dependencies on host runtime. Build, lint, and test entirely inside Docker containers (`node:22-alpine`).
-- **Automated Unit Testing**: Pre-configured with [Vitest](https://vitest.dev) and a comprehensive Obsidian API mock (`tests/__mocks__/obsidian.ts`).
-- **CI/CD Pipeline**: GitHub Actions for automated type checking, official ESLint linting (`eslint-plugin-obsidianmd`), Vitest test suite execution, and automatic GitHub Releases on tag push.
-- **AI Agent-Friendly**: Includes `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` defining strict single source of truth guidelines.
-- **One-Command Setup**: Run `./init-plugin.sh` to customize plugin ID, name, description, and Docker namespace in seconds.
+- **Fold Frontmatter by Default**: Automatically opens notes with their Properties (YAML frontmatter) folded, keeping your note view clean and uncluttered.
+- **Zero Layout Shift (CLS = 0)**: Intercepts Obsidian's pre-render fold manager, ensuring notes open collapsed on the very first frame without animations, delayed pop-ins, or jarring jumps.
+- **Two Customizable Modes**:
+  - **Remember state (default folded)** *(Default)*: Notes start folded by default. If you manually expand properties on a note, your choice is remembered and respected when reopening.
+  - **Always fold**: Properties are always collapsed upon opening, even if you previously expanded them during a session.
+- **Safe & Clean State Reset**: A dedicated **Reset all fold states** setting cleanly strips frontmatter fold markers from Obsidian storage without affecting headings or lists, ensuring Obsidian's vanilla behavior can be fully restored at any time.
+- **Zero External Dependencies**: Operates entirely offline with standard Obsidian APIs. No telemetry, no background network calls, and no unnecessary data bloat.
 
 ---
 
-## 🛠️ Quick Start
+## ⚙️ Settings
 
-### 1. Create a Repository from this Template
-Click the green **"Use this template"** button on GitHub to create your new plugin repository.
+Go to **Settings** -> **Fold Properties**:
 
-### 2. Initialize Plugin Configuration
-Clone your new repository, then run the initialization script:
+| Setting | Options / Action | Description |
+| :--- | :--- | :--- |
+| **Fold behavior** | `Remember state (default folded)` / `Always fold` | Choose whether to remember manually opened properties or always fold properties when opening a note. |
+| **Reset all fold states** | `Reset fold states` (Button) | Selectively clears frontmatter fold states from Obsidian's storage while keeping heading and list folds intact. |
+
+---
+
+## 🚀 Installation
+
+### Via BRAT (Beta Reviewers Auto-update Tester)
+1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) in Obsidian.
+2. In BRAT settings, add beta plugin: `shallow1992/obsidian-fold-properties`.
+3. Enable **Fold Properties** in Community Plugins.
+
+### Manual Installation
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [Latest Release](https://github.com/shallow1992/obsidian-fold-properties/releases/latest).
+2. Create a folder named `obsidian-fold-properties` in `<vault>/.obsidian/plugins/`.
+3. Copy the downloaded files into that folder.
+4. Reload Obsidian and enable the plugin in **Settings** -> **Community Plugins**.
+
+---
+
+## 🛠️ Development
+
+This project uses Docker to guarantee an isolated and reproducible build environment.
+
 ```bash
-./init-plugin.sh
-```
-This prompts for your plugin ID, name, and author, then automatically configures `manifest.json`, `package.json`, and `docker-compose.yml`.
-
-### 3. Development Workflow (Docker)
-
-All commands are executed inside Docker to keep your host environment clean:
-
-```bash
-# 1. Install dependencies
-docker compose run --rm obsidian-fold-properties npm install
-
-# 2. Start development mode (watch mode)
-docker compose up obsidian-fold-properties
-
-# 3. Run automated tests (Vitest)
+# Run unit tests (Vitest)
 docker compose run --rm obsidian-fold-properties npm test
 
-# 4. Run linting (official ruleset)
+# Run ESLint (official obsidianmd ruleset)
 docker compose run --rm obsidian-fold-properties npm run lint
 
-# 5. Production build
+# Production build
 docker compose run --rm obsidian-fold-properties npm run build
 ```
 
 ---
 
-## 🧪 Testing & Mocks
+## 📄 License
 
-Unit tests reside in the `tests/` directory and run via Vitest. The `obsidian` module is automatically aliased to `tests/__mocks__/obsidian.ts`, allowing you to mock and assert calls to `app`, `Plugin`, `Notice`, `Modal`, `Setting`, and `PluginSettingTab` without needing a live Electron instance.
-
-Run tests:
-```bash
-docker compose run --rm obsidian-fold-properties npm test
-```
-
----
-
-## 🔄 Upstream Synchronization
-
-The workflow `.github/workflows/sync-upstream.yml` runs every Monday (09:00 UTC) and can also be triggered manually (`Actions` -> `Sync Upstream` -> `Run workflow`).
-
-When the official Obsidian team updates `obsidianmd/obsidian-sample-plugin`, the workflow will:
-1. Fetch latest commits from upstream.
-2. Merge them into a `sync-official-upstream` branch.
-3. Automatically create a Pull Request against `master`.
-
----
-
-## 📦 Releasing
-
-1. Update your plugin version:
-   ```bash
-   docker compose run --rm obsidian-fold-properties npm run version
-   ```
-2. Commit and push the changes:
-   ```bash
-   git commit -am "chore: release version 1.0.0"
-   git tag 1.0.0
-   git push origin master --tags
-   ```
-3. GitHub Actions (`.github/workflows/release.yml`) will automatically create a GitHub Release and attach `main.js`, `manifest.json`, and `styles.css`.
+[0-BSD](./LICENSE)

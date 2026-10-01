@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import FoldPropertiesPlugin from "../src/main";
+import { FoldPropertiesSettingTab } from "../src/settings";
 import { App, MarkdownView, TFile } from "obsidian";
 
 describe("FoldPropertiesPlugin", () => {
@@ -55,7 +56,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.9.0",
+			version: "1.0.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -256,5 +257,23 @@ describe("FoldPropertiesPlugin", () => {
 
 		plugin.onunload();
 		expect((app as any).foldManager.loadPath).toBe(originalLoad);
+	});
+
+	it("should render setting tab and update foldMode on change", async () => {
+		await plugin.onload();
+		const tab = new FoldPropertiesSettingTab(app, plugin);
+
+		tab.display();
+		expect(tab.containerEl.empty).toHaveBeenCalled();
+
+		// Save spy
+		const saveSpy = vi.spyOn(plugin, "saveSettings").mockResolvedValue();
+
+		// Simulate user switching fold mode in dropdown
+		plugin.settings.foldMode = "always";
+		await plugin.saveSettings();
+
+		expect(saveSpy).toHaveBeenCalled();
+		expect(plugin.settings.foldMode).toBe("always");
 	});
 });
