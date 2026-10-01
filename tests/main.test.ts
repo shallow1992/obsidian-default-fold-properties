@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.5.1",
+			version: "0.6.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -101,8 +101,8 @@ describe("FoldPropertiesPlugin", () => {
 			frontmatter: { title: "Existing" },
 		});
 
-		// Mock that foldManager already has saved data (e.g. user unfolded it, so folds is empty)
-		const savedData = { folds: [], lines: 50 };
+		// Mock that foldManager already has saved data (e.g. user collapsed other sections)
+		const savedData = { folds: [{ from: 10, to: 20 }], lines: 50 };
 		const originalLoad = (app as any).foldManager.loadPath;
 		originalLoad.mockReturnValue(savedData);
 
@@ -110,6 +110,48 @@ describe("FoldPropertiesPlugin", () => {
 
 		const result = (app as any).foldManager.loadPath("existing.md");
 		expect(result).toBe(savedData);
+	});
+
+	it("should keep note unfolded when user manually unfolded it even if Obsidian returns null on reload", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "user-opened.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "User Opened" },
+		});
+
+		await plugin.onload();
+
+		// User manually unfolds properties -> Obsidian calls savePath with empty folds []
+		(app as any).foldManager.savePath("user-opened.md", { folds: [], lines: 100 });
+
+		// When note is reloaded later, Obsidian's loadPath returns null (since folds is empty)
+		(app as any).foldManager.loadPath.mockReturnValue?.(null);
+
+		// Our plugin should recognize the user explicitly opened it and return null instead of re-collapsing!
+		const result = (app as any).foldManager.loadPath("user-opened.md");
+		expect(result).toBeNull();
+	});
+
+	it("should restore default collapse if user manually folds properties back", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "user-refolded.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "User Refolded" },
+		});
+
+		await plugin.onload();
+
+		// User unfolds first
+		(app as any).foldManager.savePath("user-refolded.md", { folds: [], lines: 100 });
+		// User folds properties back
+		(app as any).foldManager.savePath("user-refolded.md", { folds: [{ from: 0, to: 0 }], lines: 100 });
+
+		// If Obsidian returns null or saved state, it should return fold state
+		const result = (app as any).foldManager.loadPath("user-refolded.md");
+		expect(result).toEqual({
+			folds: [{ from: 0, to: 0 }],
+			lines: 0,
+		});
 	});
 
 	it("should restore original foldManager.loadPath on onunload", async () => {
