@@ -31,11 +31,11 @@ Go to **Settings** -> **Fold Properties**:
 
 ### Via BRAT (Beta Reviewers Auto-update Tester)
 1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) in Obsidian.
-2. In BRAT settings, add beta plugin: `shallow1992/obsidian-fold-properties`.
+2. In BRAT settings, add beta plugin: `shallow1992/obsidian-default-fold-properties`.
 3. Enable **Fold Properties** in Community Plugins.
 
 ### Manual Installation
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [Latest Release](https://github.com/shallow1992/obsidian-fold-properties/releases/latest).
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [Latest Release](https://github.com/shallow1992/obsidian-default-fold-properties/releases/latest).
 2. Create a folder named `default-fold-properties` in `<vault>/.obsidian/plugins/`.
 3. Copy the downloaded files into that folder.
 4. Reload Obsidian and enable the plugin in **Settings** -> **Community Plugins**.
@@ -48,13 +48,13 @@ This project uses Docker to guarantee an isolated and reproducible build environ
 
 ```bash
 # Run unit tests (Vitest)
-docker compose run --rm obsidian-fold-properties npm test
+docker compose run --rm obsidian-default-fold-properties npm test
 
 # Run ESLint (official obsidianmd ruleset)
-docker compose run --rm obsidian-fold-properties npm run lint
+docker compose run --rm obsidian-default-fold-properties npm run lint
 
 # Production build
-docker compose run --rm obsidian-fold-properties npm run build
+docker compose run --rm obsidian-default-fold-properties npm run build
 ```
 
 ---
