@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.8.0",
+			version: "0.9.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -197,6 +197,55 @@ describe("FoldPropertiesPlugin", () => {
 			folds: [],
 			lines: 80,
 		});
+	});
+
+	it("should clean up frontmatter fold markers from localStorage when resetAllPropertyFolds is called", () => {
+		const mockStorage: Record<string, string> = {
+			"app123-note-fold-only-frontmatter.md": JSON.stringify({
+				folds: [{ from: 0, to: 0 }],
+				lines: 50,
+			}),
+			"app123-note-fold-with-headings.md": JSON.stringify({
+				folds: [{ from: 0, to: 0 }, { from: 10, to: 20 }],
+				lines: 100,
+			}),
+			"app123-note-fold-no-frontmatter.md": JSON.stringify({
+				folds: [{ from: 15, to: 30 }],
+				lines: 80,
+			}),
+		};
+
+		(globalThis as any).window = {
+			localStorage: {
+				get length() {
+					return Object.keys(mockStorage).length;
+				},
+				key: (index: number) => Object.keys(mockStorage)[index] || null,
+				getItem: (key: string) => mockStorage[key] || null,
+				setItem: (key: string, val: string) => {
+					mockStorage[key] = val;
+				},
+				removeItem: (key: string) => {
+					delete mockStorage[key];
+				},
+			},
+		};
+
+		(app as any).appId = "app123";
+
+		const count = plugin.resetAllPropertyFolds();
+		expect(count).toBe(2);
+
+		// only-frontmatter was completely removed
+		expect(mockStorage["app123-note-fold-only-frontmatter.md"]).toBeUndefined();
+
+		// with-headings preserved heading fold but stripped frontmatter fold
+		const updatedWithHeadings = JSON.parse(mockStorage["app123-note-fold-with-headings.md"]!);
+		expect(updatedWithHeadings.folds).toEqual([{ from: 10, to: 20 }]);
+
+		// no-frontmatter fold untouched
+		const updatedNoFrontmatter = JSON.parse(mockStorage["app123-note-fold-no-frontmatter.md"]!);
+		expect(updatedNoFrontmatter.folds).toEqual([{ from: 15, to: 30 }]);
 	});
 
 	it("should restore original foldManager.loadPath on onunload", async () => {
