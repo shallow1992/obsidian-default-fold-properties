@@ -3,11 +3,6 @@ import {
 	Plugin,
 	TFile,
 } from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	FoldPropertiesPluginSettings,
-	FoldPropertiesSettingTab,
-} from './settings';
 
 declare module 'obsidian' {
 	interface App {
@@ -18,22 +13,11 @@ declare module 'obsidian' {
 }
 
 export default class FoldPropertiesPlugin extends Plugin {
-	settings!: FoldPropertiesPluginSettings;
-
 	private pendingFoldTimeout: number | null = null;
-	private manuallyExpandedPaths: Set<string> = new Set();
-	private activeObservedContainer: Element | null = null;
-	private mutationObserver: MutationObserver | null = null;
-
-	private static readonly RETRY_DELAY_MS = 50;
+	private static readonly RETRY_DELAY_MS = 30;
 	private static readonly MAX_FOLD_ATTEMPTS = 15;
 
 	async onload() {
-		await this.loadSettings();
-		this.addSettingTab(new FoldPropertiesSettingTab(this.app, this));
-
-		this.setupObserver();
-
 		this.app.workspace.onLayoutReady(() => {
 			this.registerEvent(
 				this.app.workspace.on('file-open', (file: TFile | null) => {
@@ -65,26 +49,12 @@ export default class FoldPropertiesPlugin extends Plugin {
 
 	onunload() {
 		this.clearPendingFold();
-		if (this.mutationObserver) {
-			this.mutationObserver.disconnect();
-			this.mutationObserver = null;
-		}
-		this.manuallyExpandedPaths.clear();
 	}
 
 	private handleFileOrLeafChange(file: TFile | null) {
 		this.clearPendingFold();
 
 		if (!file) {
-			return;
-		}
-
-		// If configured to keep state and user previously expanded this note, don't auto-fold
-		if (
-			this.settings.reactivationBehavior === 'keep' &&
-			this.manuallyExpandedPaths.has(file.path)
-		) {
-			this.attachObserverToActiveLeaf(file);
 			return;
 		}
 
@@ -119,66 +89,13 @@ export default class FoldPropertiesPlugin extends Plugin {
 				return;
 			}
 
-			// If properties are not collapsed, trigger fold
+			// If properties are not collapsed, trigger fold instantly
 			if (!metadataContainer.classList.contains('is-collapsed')) {
 				this.app.commands.executeCommandById(
 					'editor:toggle-fold-properties',
 				);
 			}
-
-			this.attachObserverToContainer(metadataContainer, file.path);
 		}, FoldPropertiesPlugin.RETRY_DELAY_MS);
-	}
-
-	private setupObserver() {
-		this.mutationObserver = new MutationObserver((mutations) => {
-			for (const mutation of mutations) {
-				if (
-					mutation.type === 'attributes' &&
-					mutation.attributeName === 'class'
-				) {
-					const target = mutation.target as HTMLElement;
-					const activeFile = this.app.workspace.getActiveFile();
-					if (!activeFile) continue;
-
-					if (!target.classList.contains('is-collapsed')) {
-						// User manually expanded it
-						this.manuallyExpandedPaths.add(activeFile.path);
-					} else {
-						// User manually collapsed it
-						this.manuallyExpandedPaths.delete(activeFile.path);
-					}
-				}
-			}
-		});
-	}
-
-	private attachObserverToActiveLeaf(file: TFile) {
-		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (!activeView) return;
-		const metadataContainer =
-			activeView.containerEl.querySelector('.metadata-container');
-		if (metadataContainer) {
-			this.attachObserverToContainer(metadataContainer, file.path);
-		}
-	}
-
-	private attachObserverToContainer(
-		container: Element,
-		_filePath: string,
-	) {
-		if (this.activeObservedContainer === container) {
-			return;
-		}
-
-		if (this.mutationObserver) {
-			this.mutationObserver.disconnect();
-			this.mutationObserver.observe(container, {
-				attributes: true,
-				attributeFilter: ['class'],
-			});
-			this.activeObservedContainer = container;
-		}
 	}
 
 	private clearPendingFold() {
@@ -186,17 +103,5 @@ export default class FoldPropertiesPlugin extends Plugin {
 			window.clearTimeout(this.pendingFoldTimeout);
 			this.pendingFoldTimeout = null;
 		}
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<FoldPropertiesPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
 	}
 }

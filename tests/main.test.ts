@@ -15,10 +15,6 @@ describe("FoldPropertiesPlugin", () => {
 			setTimeout: (fn: Function, ms: number) => setTimeout(fn, ms),
 			clearTimeout: (id: any) => clearTimeout(id),
 		};
-		(globalThis as any).MutationObserver = vi.fn().mockImplementation(() => ({
-			observe: vi.fn(),
-			disconnect: vi.fn(),
-		}));
 
 		// Mock minimal DOM structure
 		(globalThis as any).document = {
@@ -59,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.1.0",
+			version: "0.2.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -70,22 +66,9 @@ describe("FoldPropertiesPlugin", () => {
 		vi.useRealTimers();
 	});
 
-	it("should load default settings and register event listeners on onload", async () => {
+	it("should register event listeners on onload", async () => {
 		await plugin.onload();
-
-		expect(plugin.settings).toBeDefined();
-		expect(plugin.settings.reactivationBehavior).toBe("always");
-		expect(plugin.addSettingTab).toHaveBeenCalled();
 		expect(plugin.registerEvent).toHaveBeenCalled();
-	});
-
-	it("should save settings correctly", async () => {
-		await plugin.onload();
-		plugin.settings.reactivationBehavior = "keep";
-		const saveSpy = vi.spyOn(plugin, "saveData");
-
-		await plugin.saveSettings();
-		expect(saveSpy).toHaveBeenCalledWith({ reactivationBehavior: "keep" });
 	});
 
 	it("should fold properties when an unfolded note is opened", async () => {
@@ -107,7 +90,7 @@ describe("FoldPropertiesPlugin", () => {
 		await plugin.onload();
 
 		// Fast forward timer for scheduleFold
-		vi.advanceTimersByTime(100);
+		vi.advanceTimersByTime(50);
 
 		expect(app.commands.executeCommandById).toHaveBeenCalledWith(
 			"editor:toggle-fold-properties"
@@ -132,7 +115,7 @@ describe("FoldPropertiesPlugin", () => {
 
 		await plugin.onload();
 
-		vi.advanceTimersByTime(100);
+		vi.advanceTimersByTime(50);
 
 		expect(app.commands.executeCommandById).not.toHaveBeenCalled();
 	});
