@@ -27,6 +27,9 @@ export class App {
 		modify: vi.fn().mockResolvedValue(undefined),
 		on: vi.fn(),
 	};
+	metadataCache = {
+		getFileCache: vi.fn(),
+	};
 }
 
 export class Plugin {

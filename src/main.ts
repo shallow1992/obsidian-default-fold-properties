@@ -32,14 +32,7 @@ export default class FoldPropertiesPlugin extends Plugin {
 				}),
 			);
 
-			this.registerEvent(
-				this.app.workspace.on('layout-change', () => {
-					const activeFile = this.app.workspace.getActiveFile();
-					this.handleFileOrLeafChange(activeFile);
-				}),
-			);
-
-			// Trigger for initially active file
+			// Trigger for initially active file on startup
 			const initialFile = this.app.workspace.getActiveFile();
 			if (initialFile) {
 				this.handleFileOrLeafChange(initialFile);
@@ -55,6 +48,14 @@ export default class FoldPropertiesPlugin extends Plugin {
 		this.clearPendingFold();
 
 		if (!file) {
+			return;
+		}
+
+		// Only fold if the note already has frontmatter/properties when opened.
+		// If a note opens without frontmatter, we do not fold so the user can
+		// add new properties during their editing session without disruption.
+		const fileCache = this.app.metadataCache.getFileCache(file);
+		if (!fileCache?.frontmatter) {
 			return;
 		}
 
