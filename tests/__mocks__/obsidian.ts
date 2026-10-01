@@ -25,10 +25,15 @@ export class App {
 		cachedRead: vi.fn().mockResolvedValue("test content"),
 		read: vi.fn().mockResolvedValue("test content"),
 		modify: vi.fn().mockResolvedValue(undefined),
+		getAbstractFileByPath: vi.fn(),
 		on: vi.fn(),
 	};
 	metadataCache = {
 		getFileCache: vi.fn(),
+	};
+	foldManager = {
+		loadPath: vi.fn().mockReturnValue(null),
+		savePath: vi.fn(),
 	};
 }
 
@@ -152,3 +157,6 @@ export class ItemView {
 export class WorkspaceLeaf {}
 export class MarkdownView {}
 export class Editor {}
+export class TFile {
+	path!: string;
+}
