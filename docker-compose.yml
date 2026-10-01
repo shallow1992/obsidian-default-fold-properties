@@ -1,5 +1,5 @@
 services:
-  obsidian-plugin-template: &obsidian-plugin-template
+  obsidian-fold-properties: &obsidian-fold-properties
     build: .
     working_dir: /app
     volumes:

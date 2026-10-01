@@ -1,18 +1,20 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import MyPlugin from './main';
+import FoldPropertiesPlugin from './main';
 
-export interface MyPluginSettings {
-	mySetting: string;
+export type ReactivationBehavior = 'always' | 'keep';
+
+export interface FoldPropertiesPluginSettings {
+	reactivationBehavior: ReactivationBehavior;
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default',
+export const DEFAULT_SETTINGS: FoldPropertiesPluginSettings = {
+	reactivationBehavior: 'always',
 };
 
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class FoldPropertiesSettingTab extends PluginSettingTab {
+	plugin: FoldPropertiesPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: FoldPropertiesPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -23,14 +25,18 @@ export class SampleSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc("It's a secret")
-			.addText((text) =>
-				text
-					.setPlaceholder('Enter your secret')
-					.setValue(this.plugin.settings.mySetting)
+			.setName('Re-fold on note reactivation')
+			.setDesc(
+				'Choose whether to always fold properties when switching back to a note, or preserve its opened state during the current session.',
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('always', 'Always fold properties')
+					.addOption('keep', 'Keep opened state in current session')
+					.setValue(this.plugin.settings.reactivationBehavior)
 					.onChange(async (value) => {
-						this.plugin.settings.mySetting = value;
+						this.plugin.settings.reactivationBehavior =
+							value as ReactivationBehavior;
 						await this.plugin.saveSettings();
 					}),
 			);
