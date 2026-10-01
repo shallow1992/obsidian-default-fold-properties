@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.7.0",
+			version: "0.8.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -96,7 +96,7 @@ describe("FoldPropertiesPlugin", () => {
 		expect(foldData).toBeNull();
 	});
 
-	it("should translate user unfolding in editor to saving a folded marker in foldManager", async () => {
+	it("should translate user unfolding in editor to saving a folded marker in foldManager (remember mode)", async () => {
 		const mockFile = Object.assign(new TFile(), { path: "note.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
@@ -117,7 +117,7 @@ describe("FoldPropertiesPlugin", () => {
 		});
 	});
 
-	it("should translate stored folded marker back to unfolded (null) when reopening note", async () => {
+	it("should translate stored folded marker back to unfolded (null) when reopening note (remember mode)", async () => {
 		const mockFile = Object.assign(new TFile(), { path: "user-opened.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
@@ -137,7 +137,7 @@ describe("FoldPropertiesPlugin", () => {
 		expect(result).toBeNull();
 	});
 
-	it("should translate user folding in editor to saving an empty fold list in foldManager", async () => {
+	it("should translate user folding in editor to saving an empty fold list in foldManager (remember mode)", async () => {
 		const mockFile = Object.assign(new TFile(), { path: "note-fold.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
@@ -155,6 +155,47 @@ describe("FoldPropertiesPlugin", () => {
 		expect(originalSave).toHaveBeenCalledWith("note-fold.md", {
 			folds: [],
 			lines: 50,
+		});
+	});
+
+	it("should ALWAYS return collapsed in 'always' mode even if saved state has no folds", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "always-folded.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "Always Folded" },
+		});
+
+		((app as any).foldManager.loadPath as any).mockReturnValue({
+			folds: [],
+			lines: 50,
+		});
+
+		await plugin.onload();
+		plugin.settings.foldMode = "always";
+
+		const foldData = (app as any).foldManager.loadPath("always-folded.md");
+		expect(foldData).toEqual({
+			folds: [{ from: 0, to: 0 }],
+			lines: 50,
+		});
+	});
+
+	it("should not invert folds on save in 'always' mode", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "always-folded-save.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "Always Folded" },
+		});
+
+		const originalSave = (app as any).foldManager.savePath;
+
+		await plugin.onload();
+		plugin.settings.foldMode = "always";
+
+		(app as any).foldManager.savePath("always-folded-save.md", { folds: [], lines: 80 });
+		expect(originalSave).toHaveBeenCalledWith("always-folded-save.md", {
+			folds: [],
+			lines: 80,
 		});
 	});
 
