@@ -22,38 +22,16 @@ interface InternalApp {
 	foldManager?: FoldManager;
 }
 
-interface FoldPropertiesData {
-	unfoldedPaths: Record<string, boolean>;
-}
-
-const DEFAULT_DATA: FoldPropertiesData = {
-	unfoldedPaths: {},
-};
-
 export default class FoldPropertiesPlugin extends Plugin {
-	private data: FoldPropertiesData = DEFAULT_DATA;
 	private originalLoadPath: ((path: string) => FoldedProperties | null) | null = null;
 	private originalSavePath: ((path: string, folds: FoldedProperties) => void) | null = null;
 
-	async onload() {
-		await this.loadPluginData();
+	onload() {
 		this.patchFoldManager();
 	}
 
 	onunload() {
 		this.unpatchFoldManager();
-	}
-
-	private async loadPluginData() {
-		const loaded = (await this.loadData()) as Partial<FoldPropertiesData> | null;
-		this.data = Object.assign({}, DEFAULT_DATA, loaded);
-		if (!this.data.unfoldedPaths) {
-			this.data.unfoldedPaths = {};
-		}
-	}
-
-	private async savePluginData() {
-		await this.saveData(this.data);
 	}
 
 	private patchFoldManager() {
@@ -72,54 +50,82 @@ export default class FoldPropertiesPlugin extends Plugin {
 
 		if (typeof originalSave === 'function') {
 			foldManager.savePath = (path: string, folds: FoldedProperties) => {
-				// If user unfolded properties (folds is empty [] or has no frontmatter fold from:0),
-				// Obsidian will remove the entry from its storage on unload.
-				// We record that the user intentionally opened this note so we don't re-fold it!
-				const hasFold = Array.isArray(folds?.folds) && folds.folds.length > 0;
-				if (!hasFold) {
-					if (!this.data.unfoldedPaths[path]) {
-						this.data.unfoldedPaths[path] = true;
-						void this.savePluginData();
-					}
-				} else {
-					if (this.data.unfoldedPaths[path]) {
-						delete this.data.unfoldedPaths[path];
-						void this.savePluginData();
-					}
+				const abstractFile = this.app.vault.getAbstractFileByPath(path);
+				const hasFrontmatter = abstractFile instanceof TFile &&
+					Boolean(this.app.metadataCache.getFileCache(abstractFile)?.frontmatter);
+
+				if (!hasFrontmatter) {
+					return originalSave.call(foldManager, path, folds);
 				}
 
-				return originalSave.call(foldManager, path, folds);
+				const currentFolds = Array.isArray(folds?.folds) ? folds.folds : [];
+				const isFrontmatterFoldedInEditor = currentFolds.some(
+					(f) => f.from === 0 && f.to === 0
+				);
+
+				let invertedFolds: Fold[];
+				if (isFrontmatterFoldedInEditor) {
+					// Editor is folded: Invert to Obsidian's default (unfolded, omitting from:0)
+					invertedFolds = currentFolds.filter(
+						(f) => !(f.from === 0 && f.to === 0)
+					);
+				} else {
+					// Editor is unfolded: Invert to stored folded marker ({ from: 0, to: 0 })
+					invertedFolds = [{ from: 0, to: 0 }, ...currentFolds];
+				}
+
+				return originalSave.call(foldManager, path, {
+					folds: invertedFolds,
+					lines: folds?.lines ?? 0,
+				});
 			};
 		}
 
 		foldManager.loadPath = (path: string): FoldedProperties | null => {
 			const saved = originalLoad.call(foldManager, path);
+			const abstractFile = this.app.vault.getAbstractFileByPath(path);
+			const hasFrontmatter = abstractFile instanceof TFile &&
+				Boolean(this.app.metadataCache.getFileCache(abstractFile)?.frontmatter);
 
-			// 1. If Obsidian has a saved state, respect it
-			if (saved !== null) {
+			if (!hasFrontmatter) {
 				return saved;
 			}
 
-			// 2. If user previously opened this note (unfolded), respect that choice and return null
-			if (this.data.unfoldedPaths[path]) {
-				return null;
+			// Initial state / No user manual override:
+			// Invert default: return closed ({ from: 0, to: 0 })
+			if (saved === null) {
+				return {
+					folds: [{ from: 0, to: 0 }],
+					lines: 0,
+				};
 			}
 
-			// 3. For unrecorded notes, invert the default:
-			// If frontmatter exists when opened, default to collapsed
-			const abstractFile = this.app.vault.getAbstractFileByPath(path);
-			if (abstractFile instanceof TFile) {
-				const cache = this.app.metadataCache.getFileCache(abstractFile);
-				if (cache?.frontmatter) {
-					return {
-						folds: [{ from: 0, to: 0 }],
-						lines: 0,
-					};
+			const currentFolds = Array.isArray(saved.folds) ? saved.folds : [];
+			const hasStoredMarker = currentFolds.some(
+				(f) => f.from === 0 && f.to === 0
+			);
+
+			if (hasStoredMarker) {
+				// Stored marker present -> User manually opened this note!
+				// Invert back: strip { from: 0, to: 0 } so the editor opens properties
+				const otherFolds = currentFolds.filter(
+					(f) => !(f.from === 0 && f.to === 0)
+				);
+				if (otherFolds.length === 0) {
+					return null;
 				}
+				return {
+					folds: otherFolds,
+					lines: saved.lines,
+				};
 			}
 
-			// Notes without frontmatter remain open (null)
-			return null;
+			// Stored marker NOT present -> User manually closed or normal save:
+			// Ensure { from: 0, to: 0 } is included so properties stay folded
+			return {
+				folds: [{ from: 0, to: 0 }, ...currentFolds],
+				lines: saved.lines,
+			};
 		};
 	}
 

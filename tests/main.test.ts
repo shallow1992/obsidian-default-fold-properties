@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.6.0",
+			version: "0.7.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -66,27 +66,29 @@ describe("FoldPropertiesPlugin", () => {
 		vi.useRealTimers();
 	});
 
-	it("should patch app.foldManager.loadPath and default to collapsed for notes with frontmatter", async () => {
-		const mockFile = Object.assign(new TFile(), { path: "with-frontmatter.md" });
+	it("should return collapsed fold data for unopened note with frontmatter", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "initial.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
-			frontmatter: { title: "Test" },
+			frontmatter: { title: "Initial" },
 		});
+		((app as any).foldManager.loadPath as any).mockReturnValue(null);
 
 		await plugin.onload();
 
-		// Calling loadPath on a note without previous save should return { from: 0, to: 0 }
-		const foldData = (app as any).foldManager.loadPath("with-frontmatter.md");
+		// Initial note has null in foldManager -> plugin translates to collapsed
+		const foldData = (app as any).foldManager.loadPath("initial.md");
 		expect(foldData).toEqual({
 			folds: [{ from: 0, to: 0 }],
 			lines: 0,
 		});
 	});
 
-	it("should NOT default to collapsed when note has NO frontmatter", async () => {
+	it("should return null for notes without frontmatter", async () => {
 		const mockFile = Object.assign(new TFile(), { path: "no-frontmatter.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue(null);
+		((app as any).foldManager.loadPath as any).mockReturnValue(null);
 
 		await plugin.onload();
 
@@ -94,63 +96,65 @@ describe("FoldPropertiesPlugin", () => {
 		expect(foldData).toBeNull();
 	});
 
-	it("should respect existing saved fold state if user manually operated", async () => {
-		const mockFile = Object.assign(new TFile(), { path: "existing.md" });
+	it("should translate user unfolding in editor to saving a folded marker in foldManager", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "note.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
-			frontmatter: { title: "Existing" },
+			frontmatter: { title: "Note" },
 		});
 
-		// Mock that foldManager already has saved data (e.g. user collapsed other sections)
-		const savedData = { folds: [{ from: 10, to: 20 }], lines: 50 };
-		const originalLoad = (app as any).foldManager.loadPath;
-		originalLoad.mockReturnValue(savedData);
+		const originalSave = (app as any).foldManager.savePath;
 
 		await plugin.onload();
 
-		const result = (app as any).foldManager.loadPath("existing.md");
-		expect(result).toBe(savedData);
+		// User manually opens (unfolds) properties -> editor passes empty folds []
+		(app as any).foldManager.savePath("note.md", { folds: [], lines: 100 });
+
+		// FoldManager receives inverted marker { from: 0, to: 0 }
+		expect(originalSave).toHaveBeenCalledWith("note.md", {
+			folds: [{ from: 0, to: 0 }],
+			lines: 100,
+		});
 	});
 
-	it("should keep note unfolded when user manually unfolded it even if Obsidian returns null on reload", async () => {
+	it("should translate stored folded marker back to unfolded (null) when reopening note", async () => {
 		const mockFile = Object.assign(new TFile(), { path: "user-opened.md" });
 		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
 		(app.metadataCache.getFileCache as any).mockReturnValue({
 			frontmatter: { title: "User Opened" },
 		});
 
-		await plugin.onload();
-
-		// User manually unfolds properties -> Obsidian calls savePath with empty folds []
-		(app as any).foldManager.savePath("user-opened.md", { folds: [], lines: 100 });
-
-		// When note is reloaded later, Obsidian's loadPath returns null (since folds is empty)
-		(app as any).foldManager.loadPath.mockReturnValue?.(null);
-
-		// Our plugin should recognize the user explicitly opened it and return null instead of re-collapsing!
-		const result = (app as any).foldManager.loadPath("user-opened.md");
-		expect(result).toBeNull();
-	});
-
-	it("should restore default collapse if user manually folds properties back", async () => {
-		const mockFile = Object.assign(new TFile(), { path: "user-refolded.md" });
-		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
-		(app.metadataCache.getFileCache as any).mockReturnValue({
-			frontmatter: { title: "User Refolded" },
+		// Stored marker { from: 0, to: 0 } in foldManager
+		((app as any).foldManager.loadPath as any).mockReturnValue({
+			folds: [{ from: 0, to: 0 }],
+			lines: 100,
 		});
 
 		await plugin.onload();
 
-		// User unfolds first
-		(app as any).foldManager.savePath("user-refolded.md", { folds: [], lines: 100 });
-		// User folds properties back
-		(app as any).foldManager.savePath("user-refolded.md", { folds: [{ from: 0, to: 0 }], lines: 100 });
+		// When note is reopened, plugin strips { from: 0, to: 0 } -> returns null (unfolded)
+		const result = (app as any).foldManager.loadPath("user-opened.md");
+		expect(result).toBeNull();
+	});
 
-		// If Obsidian returns null or saved state, it should return fold state
-		const result = (app as any).foldManager.loadPath("user-refolded.md");
-		expect(result).toEqual({
-			folds: [{ from: 0, to: 0 }],
-			lines: 0,
+	it("should translate user folding in editor to saving an empty fold list in foldManager", async () => {
+		const mockFile = Object.assign(new TFile(), { path: "note-fold.md" });
+		(app.vault.getAbstractFileByPath as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "Fold" },
+		});
+
+		const originalSave = (app as any).foldManager.savePath;
+
+		await plugin.onload();
+
+		// User manually folds properties -> editor passes [{ from: 0, to: 0 }]
+		(app as any).foldManager.savePath("note-fold.md", { folds: [{ from: 0, to: 0 }], lines: 50 });
+
+		// FoldManager receives inverted empty folds []
+		expect(originalSave).toHaveBeenCalledWith("note-fold.md", {
+			folds: [],
+			lines: 50,
 		});
 	});
 
