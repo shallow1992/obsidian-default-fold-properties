@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type FoldPropertiesPlugin from './main';
 
 export type FoldMode = 'remember' | 'always';
@@ -36,6 +36,21 @@ export class FoldPropertiesSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.foldMode = value as FoldMode;
 						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName('Reset all fold states')
+			.setDesc(
+				'Clear stored fold states for frontmatter properties in Obsidian storage. Use this before uninstalling or to restore Obsidian default behavior.'
+			)
+			.addButton((button) => {
+				button
+					.setButtonText('Reset fold states')
+					.setWarning()
+					.onClick(() => {
+						const count = this.plugin.resetAllPropertyFolds();
+						new Notice(`Reset property fold states for ${count} notes.`);
 					});
 			});
 	}

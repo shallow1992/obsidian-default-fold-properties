@@ -175,4 +175,55 @@ export default class FoldPropertiesPlugin extends Plugin {
 			}
 		}
 	}
+
+	/**
+	 * Scans localStorage for Obsidian's note-fold entries and removes
+	 * any frontmatter fold marker ({ from: 0, to: 0 }).
+	 * If no other folds remain on that note, the localStorage key is removed.
+	 * This cleanly restores Obsidian's vanilla behavior.
+	 */
+	resetAllPropertyFolds(): number {
+		let resetCount = 0;
+		if (typeof window === 'undefined' || !window.localStorage) {
+			return resetCount;
+		}
+
+		const internalApp = this.app as unknown as { appId?: string };
+		const appId = internalApp.appId;
+		const prefix = appId ? `${appId}-note-fold-` : '-note-fold-';
+
+		const keysToProcess: string[] = [];
+		for (let i = 0; i < window.localStorage.length; i++) {
+			const key = window.localStorage.key(i);
+			if (key && (key.includes('-note-fold-') || (appId && key.startsWith(prefix)))) {
+				keysToProcess.push(key);
+			}
+		}
+
+		for (const key of keysToProcess) {
+			try {
+				const item = window.localStorage.getItem(key);
+				if (!item) continue;
+
+				const data = JSON.parse(item) as FoldedProperties;
+				if (Array.isArray(data?.folds)) {
+					const hasFrontmatterFold = data.folds.some((f) => f.from === 0 && f.to === 0);
+					if (hasFrontmatterFold) {
+						const remainingFolds = data.folds.filter((f) => !(f.from === 0 && f.to === 0));
+						if (remainingFolds.length === 0) {
+							window.localStorage.removeItem(key);
+						} else {
+							data.folds = remainingFolds;
+							window.localStorage.setItem(key, JSON.stringify(data));
+						}
+						resetCount++;
+					}
+				}
+			} catch {
+				// Ignore parse errors for non-JSON items
+			}
+		}
+
+		return resetCount;
+	}
 }
