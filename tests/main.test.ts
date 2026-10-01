@@ -55,7 +55,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "obsidian-fold-properties",
 			name: "Fold Properties",
-			version: "0.2.0",
+			version: "0.3.0",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
@@ -71,9 +71,12 @@ describe("FoldPropertiesPlugin", () => {
 		expect(plugin.registerEvent).toHaveBeenCalled();
 	});
 
-	it("should fold properties when an unfolded note is opened", async () => {
-		const mockFile = { path: "test.md" } as TFile;
+	it("should fold properties when an unfolded note with existing frontmatter is opened", async () => {
+		const mockFile = { path: "with-frontmatter.md" } as TFile;
 		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "Hello World" },
+		});
 
 		const metadataContainer = document.createElement("div");
 		metadataContainer.className = "metadata-container";
@@ -97,9 +100,38 @@ describe("FoldPropertiesPlugin", () => {
 		);
 	});
 
+	it("should NOT fold properties when a note WITHOUT frontmatter is opened", async () => {
+		const mockFile = { path: "no-frontmatter.md" } as TFile;
+		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
+		// Note has no frontmatter
+		(app.metadataCache.getFileCache as any).mockReturnValue(null);
+
+		const metadataContainer = document.createElement("div");
+		metadataContainer.className = "metadata-container";
+
+		const leafContainer = document.createElement("div");
+		leafContainer.appendChild(metadataContainer);
+
+		const mockView = {
+			containerEl: leafContainer,
+		} as unknown as MarkdownView;
+
+		(app.workspace.getActiveViewOfType as any).mockReturnValue(mockView);
+
+		await plugin.onload();
+
+		vi.advanceTimersByTime(50);
+
+		// Should not attempt to fold because frontmatter did not exist at open time
+		expect(app.commands.executeCommandById).not.toHaveBeenCalled();
+	});
+
 	it("should not fold properties if already collapsed", async () => {
 		const mockFile = { path: "collapsed.md" } as TFile;
 		(app.workspace.getActiveFile as any).mockReturnValue(mockFile);
+		(app.metadataCache.getFileCache as any).mockReturnValue({
+			frontmatter: { title: "Collapsed" },
+		});
 
 		const metadataContainer = document.createElement("div");
 		metadataContainer.className = "metadata-container is-collapsed";
