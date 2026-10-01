@@ -1,5 +1,5 @@
 services:
-  obsidian-fold-properties: &obsidian-fold-properties
+  obsidian-default-fold-properties: &obsidian-default-fold-properties
     build: .
     working_dir: /app
     volumes:

@@ -56,7 +56,7 @@ describe("FoldPropertiesPlugin", () => {
 		plugin = new FoldPropertiesPlugin(app, {
 			id: "default-fold-properties",
 			name: "Fold Properties",
-			version: "1.0.1",
+			version: "1.0.2",
 			minAppVersion: "1.0.0",
 			description: "Fold frontmatter properties by default when opening notes.",
 			author: "shallow1992",
