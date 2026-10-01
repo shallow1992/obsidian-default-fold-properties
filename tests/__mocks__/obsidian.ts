@@ -11,8 +11,13 @@ export const Platform = {
 };
 
 export class App {
+	commands = {
+		executeCommandById: vi.fn(),
+	};
 	workspace = {
 		getActiveViewOfType: vi.fn(),
+		getActiveFile: vi.fn(),
+		onLayoutReady: vi.fn((cb: () => void) => cb()),
 		on: vi.fn(),
 		openLinkText: vi.fn(),
 	};
@@ -105,6 +110,14 @@ export class Setting {
 	});
 	addToggle = vi.fn().mockImplementation((cb) => {
 		cb({
+			setValue: vi.fn().mockReturnThis(),
+			onChange: vi.fn().mockReturnThis(),
+		});
+		return this;
+	});
+	addDropdown = vi.fn().mockImplementation((cb) => {
+		cb({
+			addOption: vi.fn().mockReturnThis(),
 			setValue: vi.fn().mockReturnThis(),
 			onChange: vi.fn().mockReturnThis(),
 		});

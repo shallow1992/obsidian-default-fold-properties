@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-plugin-template",
-	"version": "1.0.0",
-	"description": "Batteries-included Obsidian plugin template synchronized with official obsidian-sample-plugin",
+	"name": "obsidian-fold-properties",
+	"version": "0.1.0",
+	"description": "Fold frontmatter properties by default when opening notes.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

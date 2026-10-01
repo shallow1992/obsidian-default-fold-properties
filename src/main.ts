@@ -1,114 +1,202 @@
 import {
-	Editor,
 	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
 	Plugin,
+	TFile,
 } from 'obsidian';
 import {
 	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
+	FoldPropertiesPluginSettings,
+	FoldPropertiesSettingTab,
 } from './settings';
 
-// Remember to rename these classes and interfaces!
+declare module 'obsidian' {
+	interface App {
+		commands: {
+			executeCommandById(commandId: string): boolean;
+		};
+	}
+}
 
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+export default class FoldPropertiesPlugin extends Plugin {
+	settings!: FoldPropertiesPluginSettings;
+
+	private pendingFoldTimeout: number | null = null;
+	private manuallyExpandedPaths: Set<string> = new Set();
+	private activeObservedContainer: Element | null = null;
+	private mutationObserver: MutationObserver | null = null;
+
+	private static readonly RETRY_DELAY_MS = 50;
+	private static readonly MAX_FOLD_ATTEMPTS = 15;
 
 	async onload() {
 		await this.loadSettings();
+		this.addSettingTab(new FoldPropertiesSettingTab(this.app, this));
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.setupObserver();
+
+		this.app.workspace.onLayoutReady(() => {
+			this.registerEvent(
+				this.app.workspace.on('file-open', (file: TFile | null) => {
+					this.handleFileOrLeafChange(file);
+				}),
+			);
+
+			this.registerEvent(
+				this.app.workspace.on('active-leaf-change', () => {
+					const activeFile = this.app.workspace.getActiveFile();
+					this.handleFileOrLeafChange(activeFile);
+				}),
+			);
+
+			this.registerEvent(
+				this.app.workspace.on('layout-change', () => {
+					const activeFile = this.app.workspace.getActiveFile();
+					this.handleFileOrLeafChange(activeFile);
+				}),
+			);
+
+			// Trigger for initially active file
+			const initialFile = this.app.workspace.getActiveFile();
+			if (initialFile) {
+				this.handleFileOrLeafChange(initialFile);
+			}
 		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
 	}
 
-	onunload() {}
+	onunload() {
+		this.clearPendingFold();
+		if (this.mutationObserver) {
+			this.mutationObserver.disconnect();
+			this.mutationObserver = null;
+		}
+		this.manuallyExpandedPaths.clear();
+	}
+
+	private handleFileOrLeafChange(file: TFile | null) {
+		this.clearPendingFold();
+
+		if (!file) {
+			return;
+		}
+
+		// If configured to keep state and user previously expanded this note, don't auto-fold
+		if (
+			this.settings.reactivationBehavior === 'keep' &&
+			this.manuallyExpandedPaths.has(file.path)
+		) {
+			this.attachObserverToActiveLeaf(file);
+			return;
+		}
+
+		this.scheduleFold(file, 0);
+	}
+
+	private scheduleFold(file: TFile, attempt: number) {
+		this.pendingFoldTimeout = window.setTimeout(() => {
+			this.pendingFoldTimeout = null;
+
+			// Ensure active file hasn't changed during delay
+			if (this.app.workspace.getActiveFile()?.path !== file.path) {
+				return;
+			}
+
+			const activeView =
+				this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!activeView) {
+				if (attempt < FoldPropertiesPlugin.MAX_FOLD_ATTEMPTS) {
+					this.scheduleFold(file, attempt + 1);
+				}
+				return;
+			}
+
+			const leafEl = activeView.containerEl;
+			const metadataContainer = leafEl.querySelector('.metadata-container');
+
+			if (!metadataContainer) {
+				if (attempt < FoldPropertiesPlugin.MAX_FOLD_ATTEMPTS) {
+					this.scheduleFold(file, attempt + 1);
+				}
+				return;
+			}
+
+			// If properties are not collapsed, trigger fold
+			if (!metadataContainer.classList.contains('is-collapsed')) {
+				this.app.commands.executeCommandById(
+					'editor:toggle-fold-properties',
+				);
+			}
+
+			this.attachObserverToContainer(metadataContainer, file.path);
+		}, FoldPropertiesPlugin.RETRY_DELAY_MS);
+	}
+
+	private setupObserver() {
+		this.mutationObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				if (
+					mutation.type === 'attributes' &&
+					mutation.attributeName === 'class'
+				) {
+					const target = mutation.target as HTMLElement;
+					const activeFile = this.app.workspace.getActiveFile();
+					if (!activeFile) continue;
+
+					if (!target.classList.contains('is-collapsed')) {
+						// User manually expanded it
+						this.manuallyExpandedPaths.add(activeFile.path);
+					} else {
+						// User manually collapsed it
+						this.manuallyExpandedPaths.delete(activeFile.path);
+					}
+				}
+			}
+		});
+	}
+
+	private attachObserverToActiveLeaf(file: TFile) {
+		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!activeView) return;
+		const metadataContainer =
+			activeView.containerEl.querySelector('.metadata-container');
+		if (metadataContainer) {
+			this.attachObserverToContainer(metadataContainer, file.path);
+		}
+	}
+
+	private attachObserverToContainer(
+		container: Element,
+		_filePath: string,
+	) {
+		if (this.activeObservedContainer === container) {
+			return;
+		}
+
+		if (this.mutationObserver) {
+			this.mutationObserver.disconnect();
+			this.mutationObserver.observe(container, {
+				attributes: true,
+				attributeFilter: ['class'],
+			});
+			this.activeObservedContainer = container;
+		}
+	}
+
+	private clearPendingFold() {
+		if (this.pendingFoldTimeout !== null) {
+			window.clearTimeout(this.pendingFoldTimeout);
+			this.pendingFoldTimeout = null;
+		}
+	}
 
 	async loadSettings() {
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
+			(await this.loadData()) as Partial<FoldPropertiesPluginSettings>,
 		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
 	}
 }

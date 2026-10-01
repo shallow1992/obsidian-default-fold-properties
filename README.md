@@ -35,19 +35,19 @@ All commands are executed inside Docker to keep your host environment clean:
 
 ```bash
 # 1. Install dependencies
-docker compose run --rm obsidian-plugin-template npm install
+docker compose run --rm obsidian-fold-properties npm install
 
 # 2. Start development mode (watch mode)
-docker compose up obsidian-plugin-template
+docker compose up obsidian-fold-properties
 
 # 3. Run automated tests (Vitest)
-docker compose run --rm obsidian-plugin-template npm test
+docker compose run --rm obsidian-fold-properties npm test
 
 # 4. Run linting (official ruleset)
-docker compose run --rm obsidian-plugin-template npm run lint
+docker compose run --rm obsidian-fold-properties npm run lint
 
 # 5. Production build
-docker compose run --rm obsidian-plugin-template npm run build
+docker compose run --rm obsidian-fold-properties npm run build
 ```
 
 ---
@@ -58,7 +58,7 @@ Unit tests reside in the `tests/` directory and run via Vitest. The `obsidian` m
 
 Run tests:
 ```bash
-docker compose run --rm obsidian-plugin-template npm test
+docker compose run --rm obsidian-fold-properties npm test
 ```
 
 ---
@@ -78,7 +78,7 @@ When the official Obsidian team updates `obsidianmd/obsidian-sample-plugin`, the
 
 1. Update your plugin version:
    ```bash
-   docker compose run --rm obsidian-plugin-template npm run version
+   docker compose run --rm obsidian-fold-properties npm run version
    ```
 2. Commit and push the changes:
    ```bash
