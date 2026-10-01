@@ -24,39 +24,49 @@ interface InternalApp {
 
 export default class FoldPropertiesPlugin extends Plugin {
 	private originalLoadPath: ((path: string) => FoldedProperties | null) | null = null;
+	private originalSavePath: ((path: string, folds: FoldedProperties) => void) | null = null;
 
 	onload() {
+		console.log('[FoldProperties] Plugin loaded');
 		this.patchFoldManager();
 	}
 
 	onunload() {
+		console.log('[FoldProperties] Plugin unloaded');
 		this.unpatchFoldManager();
 	}
 
-	/**
-	 * Patches app.foldManager.loadPath so that notes without prior fold history
-	 * default to collapsed ({ from: 0, to: 0 }) BEFORE Obsidian renders the DOM.
-	 *
-	 * If the user has manually opened or closed the properties on a note,
-	 * Obsidian saves that state (loadPath returns non-null), and this patch
-	 * respects the user's manual choice without overriding it.
-	 */
 	private patchFoldManager() {
 		const internalApp = this.app as unknown as InternalApp;
 		const foldManager = internalApp.foldManager;
 
+		console.log('[FoldProperties] Checking foldManager:', foldManager);
+
 		if (!foldManager || typeof foldManager.loadPath !== 'function') {
+			console.warn('[FoldProperties] foldManager or loadPath not found!');
 			return;
 		}
 
-		const originalMethod = foldManager.loadPath;
-		this.originalLoadPath = originalMethod;
+		const originalLoad = foldManager.loadPath;
+		this.originalLoadPath = originalLoad;
+
+		const originalSave = foldManager.savePath;
+		this.originalSavePath = originalSave;
+
+		if (typeof originalSave === 'function') {
+			foldManager.savePath = (path: string, folds: FoldedProperties) => {
+				console.log(`[FoldProperties] savePath called for "${path}":`, JSON.stringify(folds));
+				return originalSave.call(foldManager, path, folds);
+			};
+		}
 
 		foldManager.loadPath = (path: string): FoldedProperties | null => {
-			const saved = originalMethod.call(foldManager, path);
+			const saved = originalLoad.call(foldManager, path);
+			console.log(`[FoldProperties] loadPath called for "${path}". Original returned:`, JSON.stringify(saved));
 
 			// If Obsidian has a saved state (e.g. user manually opened or folded), respect it 100%
 			if (saved !== null) {
+				console.log(`[FoldProperties] Returning saved state for "${path}":`, JSON.stringify(saved));
 				return saved;
 			}
 
@@ -65,15 +75,19 @@ export default class FoldPropertiesPlugin extends Plugin {
 			const abstractFile = this.app.vault.getAbstractFileByPath(path);
 			if (abstractFile instanceof TFile) {
 				const cache = this.app.metadataCache.getFileCache(abstractFile);
+				console.log(`[FoldProperties] File cache for "${path}":`, cache?.frontmatter);
 				if (cache?.frontmatter) {
-					return {
+					const defaultFold = {
 						folds: [{ from: 0, to: 0 }],
 						lines: 0,
 					};
+					console.log(`[FoldProperties] Applying default collapsed state for "${path}":`, JSON.stringify(defaultFold));
+					return defaultFold;
 				}
 			}
 
 			// Notes without frontmatter remain open (null)
+			console.log(`[FoldProperties] No frontmatter or not TFile for "${path}", returning null`);
 			return null;
 		};
 	}
@@ -82,9 +96,15 @@ export default class FoldPropertiesPlugin extends Plugin {
 		const internalApp = this.app as unknown as InternalApp;
 		const foldManager = internalApp.foldManager;
 
-		if (foldManager && this.originalLoadPath) {
-			foldManager.loadPath = this.originalLoadPath;
-			this.originalLoadPath = null;
+		if (foldManager) {
+			if (this.originalLoadPath) {
+				foldManager.loadPath = this.originalLoadPath;
+				this.originalLoadPath = null;
+			}
+			if (this.originalSavePath) {
+				foldManager.savePath = this.originalSavePath;
+				this.originalSavePath = null;
+			}
 		}
 	}
 }
