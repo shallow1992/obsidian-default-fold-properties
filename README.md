@@ -1,4 +1,4 @@
-# Obsidian Fold Properties
+# Obsidian Default Fold Properties
 
 An Obsidian plugin that folds frontmatter properties by default when opening notes, eliminating layout shift (CLS = 0) with seamless state management.
 
@@ -18,7 +18,7 @@ An Obsidian plugin that folds frontmatter properties by default when opening not
 
 ## ⚙️ Settings
 
-Go to **Settings** -> **Fold Properties**:
+Go to **Settings** -> **Default Fold Properties**:
 
 | Setting | Options / Action | Description |
 | :--- | :--- | :--- |
@@ -32,7 +32,7 @@ Go to **Settings** -> **Fold Properties**:
 ### Via BRAT (Beta Reviewers Auto-update Tester)
 1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) in Obsidian.
 2. In BRAT settings, add beta plugin: `shallow1992/obsidian-default-fold-properties`.
-3. Enable **Fold Properties** in Community Plugins.
+3. Enable **Default Fold Properties** in Community Plugins.
 
 ### Manual Installation
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [Latest Release](https://github.com/shallow1992/obsidian-default-fold-properties/releases/latest).

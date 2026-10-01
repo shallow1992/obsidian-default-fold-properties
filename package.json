@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-default-fold-properties",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Fold frontmatter properties by default when opening notes.",
 	"main": "main.js",
 	"type": "module",

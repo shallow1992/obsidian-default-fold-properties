@@ -1,5 +1,5 @@
 /*
- * Fold Properties: Prevent layout shift and animation jump on initial render.
+ * Default Fold Properties: Prevent layout shift and animation jump on initial render.
  * When a note opens, this suppresses the slow closing animation so the properties
  * appear folded instantly without visual glitches.
  */
